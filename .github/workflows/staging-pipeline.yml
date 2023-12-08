@@ -14,11 +14,6 @@ on:
     paths:
       - 'src/**'
     # branches-ignore: ["dev"]
-
-concurrency:
-  # group: test-on-pr-${{github.head_ref}}
-  group: buil-test
-  # cancel-in-progress: true # ile en son ki çalışır
   
 # env:
 #   AWS_REGION: xxxxx      
