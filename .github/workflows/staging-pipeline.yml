@@ -64,13 +64,10 @@ jobs:
     # environment:
     #   name: 'build'
     runs-on: ubuntu-latest
-    # env:
-    #   working-directory: ./src
     permissions: write-all
     strategy:
       matrix:
         node-version: [18.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
     - uses: actions/checkout@v3
@@ -80,34 +77,10 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
         cache-dependency-path: ./package.json 
-      # env:
-      #     NODE_OPTIONS: "--openssl-legacy-provider"
+
     - run: npm install
-      # working-directory: ./src
     - run: npm run build --if-present
-      env:
-          NODE_OPTIONS: "--max_old_space_size=8192"
-        # export NODE_OPTIONS="--max_old_space_size=12288"
-      # working-directory: ${{ env.working-directory}}
-      
-    - name: Delete Old Artifacts
-      uses: actions/github-script@v6
-      id: artifact
-      with:
-         script: |
-          const res = await github.rest.actions.listArtifactsForRepo({
-          owner: context.repo.owner,
-          repo: context.repo.repo,
-          })
-          res.data.artifacts
-           .forEach(({ id }) => {
-             github.rest.actions.deleteArtifact({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               artifact_id: id,
-             })
-           })
-           
+
     - name: zip  build
       run: zip -r my-artifact.zip build package.json tsconfig.json package-lock.json -x .github
       
@@ -149,13 +122,9 @@ jobs:
      # permissions:
      #   packages: read
      runs-on: ubuntu-latest
-    # strategy:
-    #   matrix:
-    #     node-version: [18.x]
-     needs: [build,server-live]
+     needs: [build]
      # environment:
      #   name: 'deploy'
-      # url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
      steps:
      - name: Checkout code
@@ -164,42 +133,17 @@ jobs:
      - name: Download a Build Artifact
        uses: actions/download-artifact@v2.1.1
        with:
-        name: my-artifact  # Eylem tarafından yaratılan artifact ismi
+        name: my-artifact  
         path: .
-
-     # - name: Install AWS CLI
-     #   run: |
-     #     sudo apt-get update
-     #     sudo apt-get install -y awscli
-     # - name: Configure AWS credentials
-     #   run: |
-     #     aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-     #     aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-     #     aws configure set region ${{ secrets.AWS_REGION }} 
 
      - name: copy file to server
        uses: appleboy/scp-action@v0.1.4
        with:
-         host: 3.74.117.138 # ${{ secrets.HOST }}
+         host: 3.7.17.123 # ${{ secrets.HOST }}
          username: ubuntu # ${{ secrets.USERNAME }}
          key: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
-         # port: ${{ secrets.PORT }}
          source: my-artifact.zip
          target: /var/www/portal
-
-     # - uses: burnett01/rsync-deployments@23a557dceb19f9bb960ef40cf75cab5e9b37ec1f
-     #   name: 'Deploy to staging'
-     #   with:
-     #      switches: -avzr --delete
-     #      path: public/*
-     #      remote_path: /var/www/portal
-     #      remote_host: 3.74.117.138 #${{ secrets.HOSTNAME }}
-     #      remote_user: ubuntu #${{ secrets.REMOTE_USER }}
-     #      remote_key: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
-          
-     # - name: unzip artifact
-     #   run: unzip -o /var/www/portal/public/my-artifact.zip -d /var/www/portal/public
-      
 
      - uses: JimCronqvist/action-ssh@7737f1192ddd8376686e9d6354dea44592c942bf
        name: Execute SSH commmands on remote server
