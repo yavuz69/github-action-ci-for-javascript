@@ -1,0 +1,400 @@
+name: Staging CI-CD pipeline
+
+on:
+  # schedule:
+  #   - cron: "59 23 * * *"
+    
+  # workflow_dispatch:
+  # push:
+  #   branches: [ "staging" ]
+  #   paths:
+  #   - 'src/**'
+  pull_request:
+    branches: [ "staging" ]
+    paths:
+      - 'src/**'
+    # branches-ignore: ["dev"]
+
+concurrency:
+  # group: test-on-pr-${{github.head_ref}}
+  group: buil-test
+  # cancel-in-progress: true # ile en son ki çalışır
+  
+# env:
+#   AWS_REGION: xxxxx      
+#   AWS_ACCESS_KEY_ID: xxxx
+#   AWS_SECRET_ACCESS_KEY: xxx
+
+jobs:
+   start-test-ec2:
+   
+     runs-on: ubuntu-latest # windows-latest or macos-latest
+
+     steps:
+     - name: Checkout code
+       uses: actions/checkout@v3
+       
+     # - name: Install AWS CLI
+     #   run: |
+     #     sudo apt-get update
+     #     sudo apt-get install -y awscli
+     
+     - name: Install AWS CLI
+       run: |
+         sudo apt-get update
+         # curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+         # unzip awscliv2.zip
+         # sudo ./aws/install
+         # aws --version
+         
+     - name: Configure AWS credentials
+       run: |
+         aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+         aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+         aws configure set region ${{ secrets.AWS_REGION }}  
+         
+     - name: Execute EC2 Start Script
+       run: |
+         sudo chmod +x ./terraform/ec2-start-script.sh  # Make the script executable
+         ./terraform/ec2-start-script.sh
+
+     # - name: Wait
+     #   run: |
+     #      echo "wait x minute"
+     #      sleep 60  # wait 1 minute
+
+         
+   build:
+    needs: [start-test-ec2]
+    # environment:
+    #   name: 'build'
+    runs-on: ubuntu-latest
+    # env:
+    #   working-directory: ./src
+    permissions: write-all
+    strategy:
+      matrix:
+        node-version: [18.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: ./package.json 
+      # env:
+      #     NODE_OPTIONS: "--openssl-legacy-provider"
+    - run: npm install
+      # working-directory: ./src
+    - run: npm run build --if-present
+      env:
+          NODE_OPTIONS: "--max_old_space_size=8192"
+        # export NODE_OPTIONS="--max_old_space_size=12288"
+      # working-directory: ${{ env.working-directory}}
+      
+    - name: Delete Old Artifacts
+      uses: actions/github-script@v6
+      id: artifact
+      with:
+         script: |
+          const res = await github.rest.actions.listArtifactsForRepo({
+          owner: context.repo.owner,
+          repo: context.repo.repo,
+          })
+          res.data.artifacts
+           .forEach(({ id }) => {
+             github.rest.actions.deleteArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: id,
+             })
+           })
+           
+    - name: zip  build
+      run: zip -r my-artifact.zip build package.json tsconfig.json package-lock.json -x .github
+      
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v3.1.3
+      with:
+        name: my-artifact
+        path: my-artifact.zip
+        
+
+   # lint:
+   #   name: Ensure code standards
+   #   runs-on: ubuntu-latest
+   #   steps:    
+   #   - uses: actions/checkout@v2
+   #     name: 'Checkout repository'
+    
+   #   - name: 'Install Dependencies'
+   #     run: npm install
+
+   #   - name: 'Run Linter'
+   #     run: npx standard -v
+   
+       
+     # timeout-minutes: 5
+     # steps:
+     #  - name: "Checkout repostiory"
+     #    uses: actions/checkout@v3
+     #  - name: "Setup node"
+     #    uses: actions/setup-node@v3
+     #    with:
+     #      node-version: 18
+     #  - name: "Install dependencies"
+     #    uses: bahmutov/npm-install@v1
+     #  - name: "Lint code"
+     #    run: npm run lint --if-present
+
+   deploy:
+     # permissions:
+     #   packages: read
+     runs-on: ubuntu-latest
+    # strategy:
+    #   matrix:
+    #     node-version: [18.x]
+     needs: [build,server-live]
+     # environment:
+     #   name: 'deploy'
+      # url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+     steps:
+     - name: Checkout code
+       uses: actions/checkout@v3
+
+     - name: Download a Build Artifact
+       uses: actions/download-artifact@v2.1.1
+       with:
+        name: my-artifact  # Eylem tarafından yaratılan artifact ismi
+        path: .
+
+     # - name: Install AWS CLI
+     #   run: |
+     #     sudo apt-get update
+     #     sudo apt-get install -y awscli
+     # - name: Configure AWS credentials
+     #   run: |
+     #     aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+     #     aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+     #     aws configure set region ${{ secrets.AWS_REGION }} 
+
+     - name: copy file to server
+       uses: appleboy/scp-action@v0.1.4
+       with:
+         host: 3.74.117.138 # ${{ secrets.HOST }}
+         username: ubuntu # ${{ secrets.USERNAME }}
+         key: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
+         # port: ${{ secrets.PORT }}
+         source: my-artifact.zip
+         target: /var/www/portal
+
+     # - uses: burnett01/rsync-deployments@23a557dceb19f9bb960ef40cf75cab5e9b37ec1f
+     #   name: 'Deploy to staging'
+     #   with:
+     #      switches: -avzr --delete
+     #      path: public/*
+     #      remote_path: /var/www/portal
+     #      remote_host: 3.74.117.138 #${{ secrets.HOSTNAME }}
+     #      remote_user: ubuntu #${{ secrets.REMOTE_USER }}
+     #      remote_key: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
+          
+     # - name: unzip artifact
+     #   run: unzip -o /var/www/portal/public/my-artifact.zip -d /var/www/portal/public
+      
+
+     - uses: JimCronqvist/action-ssh@7737f1192ddd8376686e9d6354dea44592c942bf
+       name: Execute SSH commmands on remote server
+       with:
+         # hosts: '${{ secrets.REMOTE_USER }}@${{ secrets.HOSTNAME }}'
+         hosts: ubuntu@3.74.117.138 # apitest.tijd4.nl
+         privateKey: ${{ secrets.SSH_PRIVATE_KEY_TEST }}
+         command: |
+           sudo apt install unzip
+           cd /var/www/portal
+           sudo unzip -o /var/www/portal/my-artifact.zip -d /var/www/portal
+           sudo rm my-artifact.zip
+           sudo npm install
+           pm2 start build --name api-tijd4
+           pm2 save
+           pm2 restart api-tijd4  #  && pm2 monit
+           # pm2 start /var/www/portal || pm2 restart /var/www/portal
+           # pm2 monit
+           sudo service nginx restart
+
+     # - name: Wait
+     #   run: |
+     #      echo "wait x minute"
+     #      sleep 600  # wait 10 minute
+     
+   backend-live:
+      needs: [deploy]
+      runs-on: ubuntu-latest
+ 
+      steps:
+      - name: Waiting for backend to start 
+        run: | 
+          #!/bin/bash
+          host="apitest.tijd4.nl"
+          duration=$((30 * 1))  # 30 seconds
+          end_time=$((SECONDS + duration))
+          while [ $SECONDS -lt $end_time ]; do
+            if curl -I $host >/dev/null 2>&1; then
+              echo "curl running!"
+              break
+            fi
+            sleep 5
+          done
+
+
+   QA-test:
+      needs: [backend-live]
+      # permissions:
+      #   checks: write
+      #   contents: read
+      runs-on: ubuntu-latest
+ 
+      steps:
+      - name: Wait for QA-test-codes
+        run: |
+          echo "Expected to start running when tests are written"
+      # - name: QA-Test Repo
+      #   uses: actions/checkout@v2
+      #   with:
+      #     repository: serhat-project/Api
+      #     token: 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 # ${{ secrets.QA_TOKEN }}
+      #     ref: main
+
+      # - name: Update Baseurls For Staging Enviroment
+      #   run: |
+      #     # echo "xxxxx" >> 
+      #     # sudo cat <<EOF > src/test/resources/config.properties
+      #     # mysoly
+      #     # EOF
+      #     sudo sed -i 's/baseUrl= https:\/\/api.tijd4.nl/baseUrl= https:\/\/apitest.tijd4.nl/ig' src/test/resources/config.properties
+      #     git config --local user.email "sucar661@gmail.com"
+      #     git config --local user.name "serhat-project"
+      #     git add config.properties
+      #     git commit -m "config.properties file modified"
+      #     git push
+          
+      # - name: QA-test repo for test
+      #   uses: actions/checkout@v3
+      #   with:
+      #     repository: serhat-project/Api
+      #     # token: ${{ secrets.QA_TOKEN }}
+      #     ref: main
+      # - name: Set up JDK 17
+      #   uses: actions/setup-java@v3
+      #   with:
+      #     java-version: '17'
+      #     distribution: 'temurin'
+      #     cache: maven
+     
+      # # - uses: browser-actions/setup-chrome@latest
+      # # - run: chrome --version
+       
+      # - name: Test with Maven
+      #   run: mvn -B clean test  # --file pom.xml
+
+    
+      # # - uses: deblockt/cucumber-report-annotations-action@v1.12
+      # #   with:
+      # #     access-token: ${{ secrets.mytoken }}
+      # #     path: "**/cucumber-report.json"
+
+      # # - name: Save Test Report as Artifact
+      # #   uses: actions/upload-artifact@v2
+      # #   with:
+      # #    name: cucumber-test-report
+      # #    path: .
+
+      # # - name: Publish Test Report
+      # #   if: success() || failure()
+      # #   uses: scacap/action-surefire-report@v1
+
+      # - name: Upload Test Reports to S3
+      #   uses: actions/checkout@v2
+      #   with:
+      #     repository: serhat-project/Api
+      #     token: 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 # ${{ secrets.QA_TOKEN }}
+      #     ref: main
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v2
+      #   with:
+      #     aws-access-key-id: '${{ env.AWS_ACCESS_KEY_ID }}'
+      #     aws-secret-access-key: '${{ env.AWS_SECRET_ACCESS_KEY }}'
+      #     aws-region: '${{ env.AWS_REGION}}'
+      # - name: Dosyayı AWS S3'ye Yükle
+      #   run: |
+      #     aws s3 cp --recursive ./test-output/ExtentReport s3://apitestrapor.tijd4.com/
+
+
+      # - name: QA-Test Repo
+      #   uses: actions/checkout@v2
+      #   with:
+      #     repository: serhat-project/Api
+      #     token: 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 # ${{ secrets.QA_TOKEN }}
+      #     ref: main
+
+      # - name: Update Baseurls For Production Enviroment
+      #   if: ${{ always() }}
+      #   run: |
+      #     # echo "Sample file was updated" >> 
+      #     # sudo cat <<EOF > src/test/resources/config.properties
+      #     # mysoly
+      #     # EOF
+         
+      #     sudo sed -i 's/baseUrl= https:\/\/apitest.tijd4.nl/baseUrl= https:\/\/api.tijd4.nl/ig' src/test/resources/config.properties
+      #     git config --local user.email "sucar661@gmail.com"
+      #     git config --local user.name "serhat-project"
+      #     git add config.properties
+      #     git commit -m "config.properties file modified"
+      #     git push
+           
+   # close-test-ec2: 
+   #    needs: [QA-test]
+   #    runs-on: ubuntu-latest
+   #    if: ${{ always() }}
+
+   #    steps:
+   #    - name: Checkout code
+   #      uses: actions/checkout@v2
+
+   #    # - name: Wait for debug
+   #    #   run: |
+   #    #     echo "wait 10 minute"
+   #    #     sleep 600  # wait 10 minute
+       
+   #    - name: Install AWS CLI
+   #      run: |
+   #        sudo apt-get update
+   #        # sudo apt-get install -y awscli
+          
+   #    - name: Configure AWS credentials
+   #      run: |
+   #        aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+   #        aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+   #        aws configure set region ${{ secrets.AWS_REGION }}  # Specify the region of your EC2 instance
+          
+   #    - name: Wait for EC2 Instance to Stop
+   #      # run: |
+   #      #   aws ec2 stop-instances --instance-ids i-0c697bcba08afc05d
+   #      run: |
+   #        #!/bin/bash
+   #        instance_id="i-0c697bcba08afc05d"
+   #        instance_state="$(aws ec2 describe-instances --instance-ids $instance_id --query "Reservations[0].Instances[0].State.Name" --output text)"
+   #        current_hour=$(date +"%H")
+   #        current_day=$(date +"%u") # 1: Monday, 7: Sunday
+   #        if [ "$current_hour" -ge 21 ] || [ "$current_hour" -lt 6 ] || [ "$current_day" -eq 7 ] && [ "$instance_state" = "running" ]; then
+   #          echo "It's between midnight and 9 AM on a Sunday. Proceeding..."
+   #          echo "wait 10 minute"
+   #          sleep 600  # wait 10 minute
+   #          aws ec2 stop-instances --instance-ids i-0c697bcba08afc05d
+   #        else
+   #          echo "It's not the desired time or day. Exiting..."
+   #          # exit 78 # 78, mark the operation as failed
+   #        fi
