@@ -7,11 +7,11 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+    #  aaaaa
 
 
 jobs:
   build:
-  # sample
     runs-on: ubuntu-latest
 
     strategy:
