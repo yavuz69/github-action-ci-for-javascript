@@ -1,0 +1,20 @@
+name: Staging Branch Access
+
+on:
+  push:
+    branches:
+      - staging
+  pull_request:
+    branches:
+      - staging
+
+jobs:
+  stagingBranchAccess:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Warning: Direct push or pull request to the staging branch is not allowed."
+            exit 1
+          fi
