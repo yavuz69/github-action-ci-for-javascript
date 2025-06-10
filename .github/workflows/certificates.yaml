@@ -31,7 +31,7 @@ jobs:
         id: cert_check
         run: |
            domains=("apptest.7lms.com" "apptest.tijd4.nl" "apptest.testgerman.de" "apptest.tuees.de" "apptest.surms.com" "apptest.nt2campus.nl")
-           warning_days=10
+           warning_days=60
            alert=""
       
            for domain in "${domains[@]}"; do
