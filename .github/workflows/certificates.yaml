@@ -47,7 +47,7 @@ jobs:
      - name: Send Slack message via API
        run: |
            curl -X POST https://slack.com/api/chat.postMessage \
-            -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.SLACK_ACCESS_TOKEN }}" \
             -H 'Content-type: application/json' \
             --data "{
               \"channel\": \"${{ secrets.SLACK_CHANNEL_ID }}"\",
