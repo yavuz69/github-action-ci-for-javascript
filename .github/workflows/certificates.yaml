@@ -1,0 +1,55 @@
+name: Certificate control CI-CD pipeline
+
+on:
+  schedule:
+    - cron: "59 23 * * *"
+    
+  workflow_dispatch:
+  # push:
+  #   branches: [ "staging" ]
+  #   paths:
+  #   - 'src/**'
+    
+  pull_request:
+    branches: [ "staging" ]
+    paths:
+      # - 'src/**'
+      - '.github/**'
+
+concurrency:
+  # group: test-on-pr-${{github.head_ref}}
+  group: buil-test
+  # cancel-in-progress: true # ile en son ki çalışır
+
+
+jobs:
+   certiticates-control:
+     runs-on: ubuntu-latest
+
+     steps:
+          
+     - name: cert info
+       run: |
+          output=$(cat <<EOF
+          $(openssl s_client -servername apptest.7lms.com -connect apptest.7lms.com:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.7lms.com /')
+          $(openssl s_client -servername apptest.tijd4.nl -connect apptest.tijd4.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.tijd4.nl /')
+          $(openssl s_client -servername apptest.testgerman.de -connect apptest.testgerman.de:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.testgerman.de /')
+          $(openssl s_client -servername apptest.tuees.de -connect apptest.tuees.de:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.tuees.de /')
+          $(openssl s_client -servername apptest.surms.com -connect apptest.surms.com:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.surms.com /')
+          $(openssl s_client -servername apptest.nt2campus.nl -connect apptest.nt2campus.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.nt2campus.nl /')
+          EOF
+          )
+          echo "$output"
+          echo "cert_output<<EOF" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+     - name: Send Slack message via API
+       run: |
+           curl -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer ${{ secrets.SLACK_BOT_TOKEN }}" \
+            -H 'Content-type: application/json' \
+            --data "{
+              \"channel\": \"${{ secrets.SLACK_CHANNEL_ID }}"\",
+              \"text\": \"🔒 SSL Cert Info:\n${{ steps.certs.outputs.cert_output }}\"
+            }"
