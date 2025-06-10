@@ -58,7 +58,7 @@ jobs:
 
       # Send Slack notification if any certificate is within 10 days
       - name: Send Slack Notification
-        if: ${{ steps.check-certs.outputs.result_apptest.7lms.com <= 70 || steps.check-certs.outputs.result_apptest.tijd4.nl <= 10 || steps.check-certs.outputs.result_apptest.testgerman.de <= 10 || steps.check-certs.outputs.result_apptest.tuees.de <= 10 || steps.check-certs.outputs.result_apptest.surms.com <= 10 || steps.check-certs.outputs.result_apptest.nt2campus.nl <= 10 }}
+        if: ${{ steps.check-certs.outputs.result_apptest.7lms.com <= 10 || steps.check-certs.outputs.result_apptest.tijd4.nl <= 10 || steps.check-certs.outputs.result_apptest.testgerman.de <= 10 || steps.check-certs.outputs.result_apptest.tuees.de <= 10 || steps.check-certs.outputs.result_apptest.surms.com <= 10 || steps.check-certs.outputs.result_apptest.nt2campus.nl <= 10 }}
         env:
           SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
