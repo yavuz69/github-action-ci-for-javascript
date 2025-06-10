@@ -29,9 +29,9 @@ jobs:
      steps:
           
      - name: cert info
-       id: certs
+       id: cert_check
        run: |
-          output=$(cat <<EOF
+          OUTPUT=$(cat <<EOF
           $(openssl s_client -servername apptest.7lms.com -connect apptest.7lms.com:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.7lms.com /')
           $(openssl s_client -servername apptest.tijd4.nl -connect apptest.tijd4.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.tijd4.nl /')
           $(openssl s_client -servername apptest.testgerman.de -connect apptest.testgerman.de:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.testgerman.de /')
@@ -40,17 +40,15 @@ jobs:
           $(openssl s_client -servername apptest.nt2campus.nl -connect apptest.nt2campus.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.nt2campus.nl /')
           EOF
           )
-          echo "$output"
-          echo "cert_output<<EOF" >> $GITHUB_OUTPUT
-          echo "$output" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+             echo "$OUTPUT" > cert_output.txt
+             echo "CERT_OUTPUT=$OUTPUT" >> $GITHUB_ENV
 
-     - name: Send Slack message via API
+     - name: Send to Slack
+       env:
+         SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
        run: |
-           curl -X POST https://slack.com/api/chat.postMessage \
-            -H "Authorization: Bearer ${{ secrets.SLACK_ACCESS_TOKEN }}" \
-            -H 'Content-type: application/json' \
-            --data "{
-              \"channel\": \"${{ secrets.SLACK_CHANNEL_ID }}"\",
-              \"text\": \"🔒 SSL Cert Info:\n${{ steps.certs.outputs.cert_output }}\"
-            }"
+         curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
+         -H "Content-type: application/json" \
+         --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"\`\`\`$(cat cert_output.txt)\`\`\`\"}" \
+         https://slack.com/api/chat.postMessage
