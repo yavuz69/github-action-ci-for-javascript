@@ -53,8 +53,8 @@ jobs:
           WARNING_DAYS=60
 
           # Slack bilgileri
-          SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
-          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          # SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+          # SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
 
           # Bugünün tarihini Epoch formatına çevir
           CURRENT_DATE=$(date +%s)
@@ -86,9 +86,9 @@ jobs:
           done < "$CERT_FILE"
 
      - name: Send to Slack
-       # env:
-       #   SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
-       #   SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
+       env:
+         SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
        run: |
          # Eğer uyarı mesajı boş değilse, Slack'e gönder
          if [ -n "$ALERT_MESSAGE" ]; then
