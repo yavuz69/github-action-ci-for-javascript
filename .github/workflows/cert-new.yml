@@ -92,9 +92,9 @@ jobs:
        run: |
          # Eğer uyarı mesajı boş değilse, Slack'e gönder
          if [ -n "$ALERT_MESSAGE" ]; then
-           curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
+           curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
               -H "Content-type: application/json" \
-              --data "{\"channel\":\"$SLACK_CHANNEL\", \"text\":\"$ALERT_MESSAGE\"}" \
+              --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"$ALERT_MESSAGE\"}" \
               https://slack.com/api/chat.postMessage
          else
            echo "No certificates are expiring within $WARNING_DAYS days."
