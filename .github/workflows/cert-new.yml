@@ -44,6 +44,9 @@ jobs:
 
 
      - name: warning
+       env:
+         SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
        run: |
           #!/bin/bash
           # Dosya adı
@@ -84,17 +87,26 @@ jobs:
              fi
           done < "$CERT_FILE"
 
-     - name: Send to Slack
-       env:
-         SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
-         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
-       run: |
-         # Eğer uyarı mesajı boş değilse, Slack'e gönder
-         if [ -n "$ALERT_MESSAGE" ]; then
+          if [ -n "$ALERT_MESSAGE" ]; then
            curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
               -H "Content-type: application/json" \
               --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"$ALERT_MESSAGE\"}" \
               https://slack.com/api/chat.postMessage
-         else
-           echo "No certificates are expiring within $WARNING_DAYS days."
-         fi
+          else
+             echo "No certificates are expiring within $WARNING_DAYS days."
+          fi
+          
+     # - name: Send to Slack
+     #   env:
+     #     SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+     #     SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
+     #   run: |
+     #     # Eğer uyarı mesajı boş değilse, Slack'e gönder
+     #     if [ -n "$ALERT_MESSAGE" ]; then
+     #       curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
+     #          -H "Content-type: application/json" \
+     #          --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"$ALERT_MESSAGE\"}" \
+     #          https://slack.com/api/chat.postMessage
+     #     else
+     #       echo "No certificates are expiring within $WARNING_DAYS days."
+     #     fi
