@@ -83,7 +83,8 @@ jobs:
 
              # Eğer kalan gün sayısı 60'dan azsa, uyarı mesajına ekle
              if [ "$days_left" -le "$WARNING_DAYS" ]; then
-                ALERT_MESSAGE+="🚨🚨🚨 Certificate Expiry Alert!\nCertificate for *$domain* is expiring in $days_left days (Expiry: $expiry_date)\n"
+                ALERT_MESSAGE+="🚨🚨🚨 Certificate Expiry Alert!\n"
+                ALERT_MESSAGE+="<@yavuz_devops> Certificate for *$domain* is expiring in $days_left days (Expiry: $expiry_date)\n"
             fi
           done < "$CERT_FILE"
 
