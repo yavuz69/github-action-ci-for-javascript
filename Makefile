@@ -4,6 +4,7 @@ LINT = npm run lint
 TEST = npm run test
 RUN  = npm start
 
+
 setup:
 	@npm install > /dev/null 2>&1
 	@echo "$(NAME) Setup complete"

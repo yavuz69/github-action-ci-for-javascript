@@ -1,0 +1,114 @@
+name: Cert-new control CI-CD pipeline
+
+on:
+  schedule:
+    - cron: "59 23 * * *"
+    
+  workflow_dispatch:
+  # push:
+  #   branches: [ "staging" ]
+  #   paths:
+  #   - 'src/**'
+    
+  pull_request:
+    branches: [ "staging" ]
+    paths:
+      - '.github/**'
+
+concurrency:
+  # group: test-on-pr-${{github.head_ref}}
+  group: buil-test
+  # cancel-in-progress: true # ile en son ki çalışır
+
+
+jobs:
+   certiticates-control:
+     runs-on: ubuntu-latest
+
+     steps:
+          
+     - name: cert info
+       id: cert_check
+       run: |
+          OUTPUT=$(cat <<EOF
+          $(openssl s_client -servername apptest.7lms.com -connect apptest.7lms.com:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.7lms.com /')
+          $(openssl s_client -servername apptest.tijd4.nl -connect apptest.tijd4.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.tijd4.nl /')
+          $(openssl s_client -servername apptest.testgerman.de -connect apptest.testgerman.de:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.testgerman.de /')
+          $(openssl s_client -servername apptest.tuees.de -connect apptest.tuees.de:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.tuees.de /')
+          $(openssl s_client -servername apptest.surms.com -connect apptest.surms.com:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.surms.com /')
+          $(openssl s_client -servername apptest.nt2campus.nl -connect apptest.nt2campus.nl:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | sed 's/^/for *.nt2campus.nl /')
+          EOF
+          )
+             echo "$OUTPUT" > cert_output.txt
+             echo "CERT_OUTPUT=$OUTPUT" >> $GITHUB_ENV
+
+
+     - name: warning
+       env:
+         SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+         SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
+       run: |
+          #!/bin/bash
+          # Dosya adı
+          CERT_FILE="cert_output.txt"
+          # Uyarı süresi (gün)
+          WARNING_DAYS=60
+
+          # Slack bilgileri
+          # SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+          # SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+
+          # Bugünün tarihini Epoch formatına çevir
+          CURRENT_DATE=$(date +%s)
+
+          # Uyarı mesajını oluşturmak için boş bir değişken
+          ALERT_MESSAGE=""
+
+          # Dosyadaki her satırı oku
+          while IFS= read -r line; do
+             # Sertifika alanı ve bitiş tarihini ayır
+             domain=$(echo "$line" | awk '{print $2}')
+             expiry_date=$(echo "$line" | awk -F'notAfter=' '{print $2}')
+
+             # Bitiş tarihini Epoch formatına çevir
+             expiry_date_epoch=$(date -d "$expiry_date" +%s 2>/dev/null)
+
+             # Eğer tarih valid değilse, satırı atla
+             if [ -z "$expiry_date_epoch" ]; then
+               continue
+             fi
+
+             # Gün farkını hesapla
+             days_left=$(( ($expiry_date_epoch - $CURRENT_DATE) / 86400 ))
+
+             # Eğer kalan gün sayısı 60'dan azsa, uyarı mesajına ekle
+             if [ "$days_left" -le "$WARNING_DAYS" ]; then
+                ALERT_MESSAGE="<@U065NLNSX62>\n"
+                ALERT_MESSAGE+="🚨🚨🚨 Certificate Expiry Alert!\n"
+                ALERT_MESSAGE+="Certificate for *$domain* is expiring in $days_left days (Expiry: $expiry_date)\n"
+            fi
+          done < "$CERT_FILE"
+
+          if [ -n "$ALERT_MESSAGE" ]; then
+           curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
+              -H "Content-type: application/json" \
+              --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"$ALERT_MESSAGE\"}" \
+              https://slack.com/api/chat.postMessage
+          else
+             echo "No certificates are expiring within $WARNING_DAYS days."
+          fi
+          
+     # - name: Send to Slack
+     #   env:
+     #     SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+     #     SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }} # Replace with your Slack Channel ID
+     #   run: |
+     #     # Eğer uyarı mesajı boş değilse, Slack'e gönder
+     #     if [ -n "$ALERT_MESSAGE" ]; then
+     #       curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" \
+     #          -H "Content-type: application/json" \
+     #          --data "{\"channel\":\"$SLACK_CHANNEL_ID\", \"text\":\"$ALERT_MESSAGE\"}" \
+     #          https://slack.com/api/chat.postMessage
+     #     else
+     #       echo "No certificates are expiring within $WARNING_DAYS days."
+     #     fi
