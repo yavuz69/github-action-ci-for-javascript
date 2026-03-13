@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: "*/30 * * * *"
 
+  workflow_dispatch:
+
 jobs:
   check-alerts:
     runs-on: ubuntu-latest
