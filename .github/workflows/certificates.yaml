@@ -1,0 +1,61 @@
+name: Certificate control CI-CD pipeline
+
+on:
+  schedule:
+    - cron: "59 23 * * *"
+    
+  workflow_dispatch:
+  # push:
+  #   branches: [ "staging" ]
+  #   paths:
+  #   - 'src/**'
+    
+  pull_request:
+    branches: [ "staging" ]
+    paths:
+      # - 'src/**'
+      - '.github/**'
+
+concurrency:
+  # group: test-on-pr-${{github.head_ref}}
+  group: buil-test
+  # cancel-in-progress: true # ile en son ki çalışır
+
+
+jobs:
+   certiticates-control:
+     runs-on: ubuntu-latest
+
+     steps:
+      - name: Check Certificate Expiry
+        id: cert_check
+        run: |
+           domains=("apptest.7lms.com" "apptest.tijd4.nl" "apptest.testgerman.de" "apptest.tuees.de" "apptest.surms.com" "apptest.nt2campus.nl")
+           warning_days=60
+           alert=""
+      
+           for domain in "${domains[@]}"; do
+             expiry_date=$(openssl s_client -servername "$domain" -connect "$domain:443" 2>/dev/null | openssl x509 -noout -enddate | sed 's/notAfter=//')
+             expiry_date_epoch=$(date -d "$expiry_date" +%s)
+             current_date_epoch=$(date +%s)
+             days_left=$(( ($expiry_date_epoch - $current_date_epoch) / 86400 ))
+
+             if [ "$days_left" -le "$warning_days" ]; then
+               alert+="⚠️ Certificate for *$domain* is expiring in $days_left days (Expiry: $expiry_date)\n"
+             fi
+           done
+
+           if [ -n "$alert" ]; then
+             echo "ALERT_MESSAGE=$alert" >> $GITHUB_ENV
+           fi
+
+      - name: Send Alert to Slack
+        if: env.ALERT_MESSAGE != ''
+        env:
+          SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN  }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID  }} # Replace with your Slack Channel ID
+        run: |
+           curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
+           -H "Content-type: application/json" \
+           --data "{\"channel\":\"$SLACK_CHANNEL\", \"text\":\"$ALERT_MESSAGE\"}" \
+           https://slack.com/api/chat.postMessage

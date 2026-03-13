@@ -1,0 +1,87 @@
+name: Check SSL Certificates
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Runs daily at 9 AM UTC (5 PM CEST)
+  workflow_dispatch: # Allows manual triggering
+  
+  # pull_request:
+  #   branches: [ "staging" ]
+  #   paths:
+  #     # - 'src/**'
+  #     - '.github/**'
+      
+jobs:
+  check-certificates:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository to access the script
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Run the certificate check script
+      - name: Check Certificate Expirations
+        id: check-certs
+        run: |
+          #!/bin/bash
+          set -e
+
+          # Function to check certificate and set output
+          check_cert() {
+              DOMAIN=$1
+              echo "Checking $DOMAIN..."
+              EXP_DATE=$(openssl s_client -servername $DOMAIN -connect $DOMAIN:443 2>/dev/null | openssl x509 -noout -dates | grep 'notAfter=' | cut -d= -f2)
+              if [ -z "$EXP_DATE" ]; then
+                  echo "Failed to retrieve expiration date for $DOMAIN"
+                  echo "result_$DOMAIN=error" >> $GITHUB_OUTPUT
+                  return 1
+              fi
+
+              # Convert expiration date to seconds since epoch
+              EXP_SECONDS=$(date -d "$EXP_DATE" +%s)
+              CURRENT_SECONDS=$(date +%s)
+              DAYS_LEFT=$(( (EXP_SECONDS - CURRENT_SECONDS) / 86400 ))
+
+              echo "Expiration date for $DOMAIN: $EXP_DATE ($DAYS_LEFT days left)"
+              echo "result_$DOMAIN=$DAYS_LEFT" >> $GITHUB_OUTPUT
+              echo "exp_date_$DOMAIN=$EXP_DATE" >> $GITHUB_OUTPUT
+          }
+
+          # List of domains to check
+          DOMAINS=("apptest.7lms.com" "apptest.tijd4.nl" "apptest.testgerman.de" "apptest.tuees.de" "apptest.surms.com" "apptest.nt2campus.nl")
+
+          # Loop through each domain and store results
+          for DOMAIN in "${DOMAINS[@]}"; do
+              check_cert "$DOMAIN"
+          done
+
+      # Send Slack notification if any certificate is within 10 days
+      - name: Send Slack Notification
+        if: ${{ contains(fromJSON('["' + steps.check-certs.outputs.result_apptest_7lms_com + '", "' + steps.check-certs.outputs.result_apptest_tijd4_nl + '", "' + steps.check-certs.outputs.result_apptest_testgerman_de + '", "' + steps.check-certs.outputs.result_apptest_tuees_de + '", "' + steps.check-certs.outputs.result_apptest_surms_com + '", "' + steps.check-certs.outputs.result_apptest_nt2campus_nl + '"]').*', '<= 10') }}
+        env:
+          SLACK_ACCESS_TOKEN: ${{ secrets.SLACK_ACCESS_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: |
+          #!/bin/bash
+          set -e
+
+          # Prepare message
+          MESSAGE="Certificate expiration alerts:\n"
+          DOMAINS=("apptest.7lms.com" "apptest.tijd4.nl" "apptest.testgerman.de" "apptest.tuees.de" "apptest.surms.com" "apptest.nt2campus.nl")
+
+          for DOMAIN in "${DOMAINS[@]}"; do
+              DAYS_LEFT=$(echo "${{ steps.check-certs.outputs.result_$DOMAIN }}")
+              EXP_DATE=$(echo "${{ steps.check-certs.outputs.exp_date_$DOMAIN }}")
+              if [ "$DAYS_LEFT" ] && [ "$DAYS_LEFT" -le 70 ] && [ "$DAYS_LEFT" -ge 0 ]; then
+                  MESSAGE="$MESSAGE- *.$DOMAIN will expire on $EXP_DATE (in $DAYS_LEFT days)\n"
+              fi
+          done
+
+          # Send to Slack if there are alerts
+          if [ ! -z "$MESSAGE" ] && [ "${MESSAGE}" != "Certificate expiration alerts:" ]; then
+            curl -X POST -H "Authorization: Bearer $SLACK_ACCESS_TOKEN" -H 'Content-type: application/json' --data "{\"channel\":\"$SLACK_CHANNEL_ID\",\"text\":\"$MESSAGE\"}" https://slack.com/api/chat.postMessage
+            echo "Slack notification sent"
+          else
+            echo "No certificates expiring within 10 days"
+          fi
