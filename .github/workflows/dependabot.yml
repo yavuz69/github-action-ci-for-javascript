@@ -1,0 +1,16 @@
+name: Dependabot Slack Alert
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  check-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack Message
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+          --data '{"text":"Dependabot alert detected"}' \
+          ${{ secrets.SLACK_WEBHOOK }}
