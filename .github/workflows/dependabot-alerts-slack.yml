@@ -37,24 +37,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          HTTP_STATUS=$(curl -sS \
+          curl -sS \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            -o alerts.json \
-            -w "%{http_code}" \
-            "https://api.github.com/repos/${REPO}/dependabot/alerts?state=open&per_page=100")
-
-          echo "HTTP status: ${HTTP_STATUS}"
-
-          if [ "${HTTP_STATUS}" != "200" ]; then
-            echo "GitHub API request failed"
-            cat alerts.json
-            exit 1
-          fi
+            "https://api.github.com/repos/${REPO}/dependabot/alerts?state=open&per_page=100" \
+            -o alerts.json
 
           if ! jq empty alerts.json >/dev/null 2>&1; then
-            echo "Invalid JSON response from GitHub API"
+            echo "GitHub API did not return valid JSON"
             cat alerts.json
             exit 1
           fi
@@ -69,14 +60,7 @@ jobs:
           from datetime import datetime, timedelta, timezone
 
           with open("alerts.json", "r", encoding="utf-8") as f:
-              data = json.load(f)
-
-          if isinstance(data, dict):
-              message = data.get("message", "Unknown API error")
-              raise SystemExit(f"GitHub API returned an object instead of a list: {message}")
-
-          if not isinstance(data, list):
-              raise SystemExit("Unexpected GitHub API response format")
+              alerts = json.load(f)
 
           now = datetime.now(timezone.utc)
           since = now - timedelta(hours=6)
@@ -84,26 +68,15 @@ jobs:
           def parse_dt(value):
               if not value:
                   return None
-              try:
-                  return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-              except ValueError:
-                  return None
+              return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
           filtered = []
-
-          for alert in data:
-              if not isinstance(alert, dict):
-                  continue
-
+          for alert in alerts:
               state = (alert.get("state") or "").lower()
               if state != "open":
                   continue
 
               security_vuln = alert.get("security_vulnerability") or {}
-              security_adv = alert.get("security_advisory") or {}
-              dependency = alert.get("dependency") or {}
-              package = dependency.get("package") or {}
-
               severity = (security_vuln.get("severity") or "").lower()
               if severity not in {"high", "critical"}:
                   continue
@@ -111,22 +84,28 @@ jobs:
               created_at = parse_dt(alert.get("created_at"))
               updated_at = parse_dt(alert.get("updated_at"))
 
-              is_recent = (
-                  (created_at is not None and created_at >= since) or
-                  (updated_at is not None and updated_at >= since)
-              )
-
-              if not is_recent:
+              if not ((created_at and created_at >= since) or (updated_at and updated_at >= since)):
                   continue
+
+              dependency = (alert.get("dependency") or {})
+              advisory = (alert.get("security_advisory") or {})
+              package = dependency.get("package") or {}
+              cve_ids = advisory.get("cve_id") or "N/A"
+              ghsa_id = advisory.get("ghsa_id") or "N/A"
+              summary = advisory.get("summary") or "No summary"
+              html_url = alert.get("html_url") or ""
+
+              pkg_name = package.get("name") or "unknown-package"
+              ecosystem = package.get("ecosystem") or "unknown-ecosystem"
 
               filtered.append({
                   "severity": severity.upper(),
-                  "package": package.get("name") or "unknown-package",
-                  "ecosystem": package.get("ecosystem") or "unknown-ecosystem",
-                  "summary": security_adv.get("summary") or "No summary",
-                  "cve": security_adv.get("cve_id") or "N/A",
-                  "ghsa": security_adv.get("ghsa_id") or "N/A",
-                  "url": alert.get("html_url") or "",
+                  "package": pkg_name,
+                  "ecosystem": ecosystem,
+                  "summary": summary,
+                  "cve": cve_ids,
+                  "ghsa": ghsa_id,
+                  "url": html_url,
               })
 
           filtered = filtered[:10]
@@ -137,12 +116,12 @@ jobs:
               }
           else:
               lines = []
-              lines.append(f"🚨 New/updated HIGH/CRITICAL Dependabot alerts: {len(filtered)}")
+              lines.append(f"🚨 *New/updated HIGH/CRITICAL Dependabot alerts*: {len(filtered)}")
               lines.append("")
 
               for item in filtered:
                   lines.append(
-                      f"• {item['severity']} | {item['package']} ({item['ecosystem']})\n"
+                      f"• *{item['severity']}* | `{item['package']}` ({item['ecosystem']})\n"
                       f"  {item['summary']}\n"
                       f"  CVE: {item['cve']} | GHSA: {item['ghsa']}\n"
                       f"  {item['url']}"
