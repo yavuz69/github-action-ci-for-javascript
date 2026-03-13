@@ -63,7 +63,7 @@ jobs:
               alerts = json.load(f)
 
           now = datetime.now(timezone.utc)
-          since = now - timedelta(hours=6)
+          since = now - timedelta(days=30)
 
           def parse_dt(value):
               if not value:
