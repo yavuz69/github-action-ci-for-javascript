@@ -17,6 +17,16 @@ jobs:
       REPO: ${{ github.repository }}
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 
+          
+      - name: Run Semgrep
+        run: |
+          # Semgrep'i Docker üzerinden çalıştırıyoruz, böylece kurulumla uğraşmıyoruz
+          docker run --rm -v $(pwd):/src returntocorp/semgrep semgrep scan --config auto --error
+          
       - name: Validate required secrets
         shell: bash
         run: |
