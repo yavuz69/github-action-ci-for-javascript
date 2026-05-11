@@ -3,10 +3,7 @@ name: Staging CI-CD pipeline
 on:
     
   # workflow_dispatch:
-  # push:
-  #   branches: [ "staging" ]
-  #   paths:
-  #   - 'src/**'
+
   pull_request:
     branches: [ "staging" ]
     paths:
