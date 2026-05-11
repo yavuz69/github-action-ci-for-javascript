@@ -1,8 +1,6 @@
 name: Staging CI-CD pipeline
 
 on:
-  # schedule:
-  #   - cron: "59 23 * * *"
     
   # workflow_dispatch:
   # push:
