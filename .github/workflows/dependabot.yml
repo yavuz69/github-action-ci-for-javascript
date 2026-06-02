@@ -2,8 +2,8 @@ name: Dependabot Slack Alert
 
 on:
   repository_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"
+  # schedule:
+  #   - cron: "*/30 * * * *"
 
   workflow_dispatch:
 
