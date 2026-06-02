@@ -1,8 +1,8 @@
 name: Dependabot Alerts to Slack
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"  # "0 */6 * * *"
+  # schedule:
+  #   - cron: "*/5 * * * *"  # "0 */6 * * *"
   workflow_dispatch:
 
 permissions:
